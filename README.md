@@ -1,8 +1,6 @@
 web-tools
 =========
 
-web-tools
-
 ## Description
 
 Web tools is a set of tools to manage LAMP websites across servers. I use it mainly for static / Wordpress and Drupal sites but can be used and extended to any type of sites.
@@ -13,6 +11,8 @@ Just clone the repo and add 755 permissions to files on bin/ directory
 
 
 ## Usage:
+
+This tool is constantly evolved. Documentation is inline on each documentation. Use this as a examples that are probably old at this point
 
 ```sh
 
@@ -100,3 +100,15 @@ Running remote command: OK
 
 
 ```
+
+## Need Help or Want to Contribute?
+
+All contributions are welcome: ideas, patches, documentation, bug reports,
+complaints, and even something you drew up on a napkin.
+
+It is more important to me that you are able to contribute and get help if you
+need it..
+
+## More Documentation
+
+None yet
