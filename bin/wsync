@@ -36,6 +36,7 @@ class OptparseWsync
     options.debug = false
     options.transfer_type = :rsync
     options.skipdb = false
+    options.skipfiles = false
 
     opt_parser = OptionParser.new do |opts|
 
@@ -66,13 +67,14 @@ class OptparseWsync
 
       # sync db
       opts.on("-s", "--skipdb", "Do not sync database") do
-        if options.all 
-          puts "wsync error: Cannot specify -a and -s together".red
-          exit 1
-        end
         options.skipdb = true
       end
 
+      # sync db
+      opts.on("-f", "--skipfiles", "Do not sync files") do
+        options.skipfiles = true
+      end
+      
       # exclude files
       opts.on("-x", "--exclude=PATTERN","Specify PATTERN of files to be excluded") do |x|
         options.exclude << x 
@@ -221,33 +223,36 @@ end
 # Move files:
 
 # Move files cmd:
+if not options.skipfiles
 
-case options.transfer_type
-when :rsync
-  # Variables:
-  mf_cmd = "/usr/bin/rsync"
-  mf_flags = "--archive --delete --verbose"
-  mf_src_host = src[:site_host]
-  mf_src_path = src[:site_path]
-  mf_dst_host = dst[:site_host]
-  mf_dst_path = dst[:site_path]
-  mf_cache_dir = File.join(cache_dir,src[:url])
+  case options.transfer_type
+  when :rsync
+    # Variables:
+    mf_cmd = "/usr/bin/rsync"
+    mf_flags = "--archive --delete --verbose"
+    mf_src_host = src[:site_host]
+    mf_src_path = src[:site_path]
+    mf_dst_host = dst[:site_host]
+    mf_dst_path = dst[:site_path]
+    mf_cache_dir = File.join(cache_dir,src[:url])
 
-  # Commands to excecute
-  mf_exec_a = "#{mf_cmd} #{mf_flags} #{mf_src_host}:#{mf_src_path}/ #{mf_cache_dir}"
-  mf_exec_b = "#{mf_cmd} #{mf_flags} #{mf_cache_dir}/ #{mf_dst_host}:#{mf_dst_path}"
+    # Commands to excecute
+    mf_exec_a = "#{mf_cmd} #{mf_flags} #{mf_src_host}:#{mf_src_path}/ #{mf_cache_dir}"
+    mf_exec_b = "#{mf_cmd} #{mf_flags} #{mf_cache_dir}/ #{mf_dst_host}:#{mf_dst_path}"
 
-  # debug;
-  puts "DEBUG: #{mf_exec_a}" if options.debug
-  puts "DEBUG: #{mf_exec_b}" if options.debug
+    # debug;
+    puts "DEBUG: #{mf_exec_a}" if options.debug
+    puts "DEBUG: #{mf_exec_b}" if options.debug
 
-  # Excecute commands:
-  print "Syncing website files: " if not options.quiet
-  myexec mf_exec_a, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  myexec mf_exec_b, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  print "OK\n".green if not options.quiet and not options.verbose
-when :ftp
-  puts "wsync error: transfer type method not supported yet".red
+    # Excecute commands:
+    print "Syncing website files: " if not options.quiet
+    myexec mf_exec_a, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec mf_exec_b, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    print "OK\n".green if not options.quiet and not options.verbose
+  when :ftp
+    puts "wsync error: transfer type method not supported yet".red
+  end
+
 end
 
 ################################################
