@@ -1,0 +1,343 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'open3'
+require 'optparse'
+require 'ostruct'
+require 'colorize'
+require 'fileutils'
+require 'yaml'
+require 'timeout'
+require 'pp'
+require_relative File.join(File.dirname(__FILE__),'..','lib','functions.rb')
+
+
+################################################################################
+#
+# Command parser configuration
+#
+
+$command = File.basename($0)
+
+class OptparseWrestore
+
+  # Return a structure describing the options.
+  #
+  def self.parse(args)
+    # The options specified on the command line will be collected in *options*.
+    # We set default values here.
+    options = OpenStruct.new
+    options.verbose = false
+    options.debug = false
+    options.quiet = false
+    options.skipdb = false
+    options.skipfiles = false
+    options.tag = -1
+
+    opt_parser = OptionParser.new do |opts|
+
+      opts.banner = "Usage: #{$command} [options] label [destination label]"
+
+      opts.separator ""
+      opts.separator "Specific options:"
+
+      # Tag
+      opts.on("-t", "--tag TAG_NUM", "What tag to restore") do |t|
+        options.tag = t
+      end
+
+      # skip files
+      opts.on("-f", "--skipfiles", "Do not restore files") do
+        options.skipfiles = true
+      end
+
+      # skip db
+      opts.on("-s", "--skipdb", "Do not restore database") do
+        options.skipdb = true
+      end
+
+      opts.separator ""
+      #verbose
+      opts.on("-v", "--verbose", "Verbose output") do
+        options.verbose = true
+      end
+
+      #quiet
+      opts.on("-q", "--quiet", "Run quiet mode") do
+        options.quiet = true
+      end
+
+      # Debug the script
+      opts.on("-d", "--debug", "Debug the script internals") do
+        options.debug = true
+      end
+
+      opts.separator ""
+      opts.separator "Common options:"
+
+      # No argument, shows at tail.  This will print an options summary.
+      # Try it and see!
+      opts.on_tail("-h", "--help", "Show this message") do
+        puts opts
+        exit
+      end
+
+      # Another typical switch to print the version.
+      opts.on_tail("--version", "Show version") do
+        puts OptionParser::Version.join('.')
+        exit
+      end
+
+
+    end
+
+
+    opt_parser.parse!(args)
+
+    if not args.size.between? 1,2
+      puts opt_parser
+      exit
+    end
+
+    options
+  end  # parse()
+
+end  # class OptparseExample
+
+################################################################################
+#
+# Parse options and verify src and dst
+#
+
+begin
+  options = OptparseWrestore.parse(ARGV)
+rescue => e
+  puts "wrestore error: #{e}".red
+  exit 1
+end
+
+label = ARGV.shift
+dst_label = ARGV.size > 0 ? ARGV.shift : false
+
+if options.debug 
+  puts "DEBUG: label = #{label}"
+end
+
+################################################################################
+#
+# Default exec options
+#
+
+EXEC_TIMEOUT = 600
+
+exec_opts = {
+  :stderr => true, 
+  :stdout => options.verbose, 
+  :exit_on_error => true, 
+  :timeout => EXEC_TIMEOUT
+}
+
+################################################################################
+#
+# Load configuration file
+#
+
+config = load_config_file
+
+if options.debug 
+  puts "DEBUG: config array:"
+  pp config
+end
+
+################################################################################
+#
+# Get configuration for websites:
+#
+
+site = config[:websites].find { |c| label == c[:label] }
+
+if options.debug
+  puts "DEBUG site config:"
+  pp site
+end
+
+if site.nil?
+  $stderr.puts "wrestore error: Could not find #{label} in config file".red
+  exit 1
+end
+
+if dst_label
+
+  dst_site = config[:websites].find { |c| dst_label == c[:label] }
+
+  if options.debug
+    puts "DEBUG dst_site config:"
+    pp dst_site
+  end
+
+  if dst_site.nil?
+    $stderr.puts "wrestore error: Could not find #{dst_label} in config file".red
+    exit 1
+  end
+
+end
+
+
+# IF dst_label is set, use dst_site as remote site, otherwise
+# just use the src site
+
+remote = dst_label ? dst_site : site
+
+################################################################################
+#
+# Verify connectivity
+#
+
+myexec "ssh #{remote[:site_host]} hostname", exec_opts
+
+################################################################################
+#
+# TAG:
+#
+
+data_dir = File.join(config[:backup][:storage],site[:url])
+puts "DEBUG data_dir: #{data_dir}" if options.debug
+
+# We need to find the latest tag:
+if options.tag == -1 
+
+  tags = Dir[File.join(data_dir,'*')].map { |x| x.split('/').last.to_i }
+  puts "DEBUG tags: #{tags}" if options.debug
+
+  # If there are no tags, exit with an error
+  if tags.empty? 
+    $stderr.puts "wrestore error: No backups available for this site".red
+    exit 1
+  end
+
+  # print a warning and show the tag to restore
+  tag = tags.sort.last
+  puts "wsync warning: No tag specified, using latest tag: #{tag}".yellow if not options.quiet
+else
+  tag = options.tag
+end
+
+################################################################################
+#
+# Backup directory
+#
+
+tag_dir = File.join(data_dir,tag.to_s)
+data_dir = File.join(tag_dir,'data')
+dump_file = File.join(tag_dir,'db','dbdump.sql.gz')
+puts "DEBUG: tag_dir #{tag_dir}" if options.debug
+puts "DEBUG: data_dir #{data_dir}" if options.debug
+puts "DEBUG: dump_file #{dump_file}" if options.debug
+
+# Check backup dir
+
+if not options.skipfiles
+  begin
+    if not File.exists? data_dir
+      $stderr.puts "wrestore error: Files dir not found".red
+      exit 1
+    end
+  rescue => e
+    puts "wrestore error: Something wrong happened when trying to check #{data_dir}".red
+    puts "Error was: #{e}".red
+  end
+end
+
+# Check dbdump file
+
+if not options.skipdb
+  begin
+    if not File.exists? dump_file
+      $stderr.puts "wrestore error: DB Dir not found".red
+      exit 1
+    end
+  rescue => e
+    puts "wrestore error: Something wrong happened when trying to check #{dump_file}".red
+    puts "Error was: #{e}".red
+  end
+end
+
+################################################################################
+#
+# Check restore dir:
+#
+
+
+puts "DEBUG: restore_dir = #{remote[:site_path]}" if options.debug
+
+test_file = File.join(remote[:site_path],'.restore_test')
+
+# Verify restore dir:
+myexec "ssh #{remote[:site_host]} 'touch #{test_file}'", exec_opts
+
+################################################################################
+#
+# Rsync content 
+# 
+
+if not options.skipfiles
+
+  restore_files = "/usr/bin/rsync "
+  restore_files += "--archive "
+  restore_files += "--delete "
+  restore_files += "--verbose " if options.verbose
+  restore_files += "--quiet " if options.quiet
+  restore_files += "#{data_dir}/ "
+  restore_files += "#{remote[:site_host]}:#{remote[:site_path]} "
+
+  puts "DEBUG: #{restore_files}" if options.debug
+
+  print "Restoring files: " if not options.quiet
+  myexec restore_files, exec_opts
+  puts "OK".green if not options.quiet and not options.verbose 
+
+end
+
+
+################################################################################
+#
+# Database:
+# 
+
+if not options.skipdb
+
+  # Flush db command:
+  flush_db = "ssh "
+  flush_db += "#{remote[:mysql_host]} " 
+  flush_db += "'/usr/bin/mysql -e " 
+  flush_db += "\"DROP DATABASE #{remote[:mysql_db]};" 
+  flush_db += "CREATE DATABASE #{remote[:mysql_db]};\"'" 
+
+  # command:
+  restore_db = "cat #{dump_file}|gunzip - |"
+  restore_db += "ssh " 
+  restore_db += "#{remote[:mysql_host]} " 
+  restore_db += "'/usr/bin/mysql #{remote[:mysql_db]}' "
+
+  # debug
+  puts "DEBUG: #{flush_db}" if options.debug
+  puts "DEBUG: #{restore_db}" if options.debug
+
+  print "Restoring DB: " if not options.quiet
+  myexec flush_db, exec_opts
+  myexec restore_db, exec_opts
+  puts "OK".green if not options.quiet
+
+end
+
+################################################
+# Execute remote commands:
+
+if not remote[:exec_remote].to_s.empty?
+  print "Running remote command: " if not options.quiet
+  puts "DEBUG: Executing #{remote[:exec_remote]} on #{remote[:site_host]}" if options.debug
+  cmd = "ssh #{remote[:site_host]} '#{remote[:exec_remote]}'"
+  myexec cmd, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => false, :timeout => EXEC_TIMEOUT}
+  print "OK\n".green if not options.quiet and not options.verbose
+end
+
