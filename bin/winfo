@@ -194,6 +194,8 @@ if options.backups
 
   end
 
+  rows.sort_by! { |row| row[0] }
+
   puts Terminal::Table.new :title => "Backup list", :headings => ['Tag #','Label', 'URL','Description','Date'], :rows => rows
 
 exit
