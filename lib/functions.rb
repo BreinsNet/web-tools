@@ -76,7 +76,7 @@ def load_config_file
 
   begin
 
-    File.open("/opt/webtools/conf/settings.yaml") do |file|
+    File.open(File.join(File.dirname(__FILE__),"..","conf","settings.yaml")) do |file|
       content = file.read
       config = YAML::load(content)
     end
