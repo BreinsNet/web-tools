@@ -246,8 +246,8 @@ if not options.skipfiles
 
     # Excecute commands:
     print "Syncing website files: " if not options.quiet
-    myexec mf_exec_a, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-    myexec mf_exec_b, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec mf_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec mf_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
     print "OK\n".green if not options.quiet and not options.verbose
   when :ftp
     puts "wsync error: transfer type method not supported yet".red
@@ -283,9 +283,9 @@ if not options.skipdb
 
   # Execute commands:
   print "Syncing database: " if not options.quiet
-  myexec cdb_exec_a, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  myexec cdb_exec_b, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  myexec cdb_exec_c, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+  myexec cdb_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+  myexec cdb_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+  myexec cdb_exec_c, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
   print "OK\n".green if not options.quiet and not options.verbose
 
 end
