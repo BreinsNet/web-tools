@@ -273,7 +273,7 @@ puts "DEBUG: restore_dir = #{remote[:site_path]}" if options.debug
 test_file = File.join(remote[:site_path],'.restore_test')
 
 # Verify restore dir:
-myexec "ssh #{remote[:site_host]} 'touch #{test_file}'", exec_opts
+myexec "ssh #{remote[:site_host]} 'touch #{test_file}'", exec_opts if not options.skipfiles
 
 ################################################################################
 #
