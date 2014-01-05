@@ -46,6 +46,11 @@ class OptparseWbackup
       end
 
       #Description
+      opts.on("-m", "--mirror", "Mirror data to second storage") do
+        options.mirror = true
+      end
+
+      #Description
       opts.on("-D", "--description DESC", 
               "Backup description text") do |d|
         options.description = d
@@ -98,7 +103,7 @@ class OptparseWbackup
 
     opt_parser.parse!(args)
 
-    if args.size < 1 and not options.all
+    if args.size < 1 and not options.all and not options.mirror
       puts opt_parser
       exit
     end
@@ -158,21 +163,25 @@ end
 # Handle special case of backing up all the sites:
 #
 
+
 if options.all
 
   puts "INFO: Backing up all the sites:" unless options.quiet
 
-  config[:websites].each do |site|
-    label = site[:label]
+
+  backup_all_sites = config[:websites].select {|site| site if site[:backup_all] == true }
+
+  backup_all_sites.each do |site|
+    site_label = site[:label]
     command = "wbackup "
-    command = "-q " if options.quiet
-    command = "-v " if options.verbose
-    command = "-d " if options.debug
-    command += "#{label}"
+    command += "-q " if options.quiet
+    command += "-v " if options.verbose
+    command += "-d " if options.debug
+    command += "#{site_label}"
 
     unless options.quiet
       print "\n"
-      msg = "Site: #{site[:url]} (#{label})"
+      msg = "Site: #{site[:url]} (#{site_label})"
       puts msg
       (msg.size).times { print '-' }
       print "\n"
@@ -187,177 +196,205 @@ if options.all
 
   end
 
-  exit
 end
 
 
 ################################################################################
 #
-# Get configuration for websites:
+# Start single lable backup:
 #
 
-site = config[:websites].find { |c| label == c[:label] }
+if label != nil
 
-if options.debug
-  puts "DEBUG site config:"
-  pp site
-end
+  site = config[:websites].find { |c| label == c[:label] }
 
-if site.nil?
-  $stderr.puts "wbackup error: Could not find #{label} in config file".red
-  exit 1
-end
+  if options.debug
+    puts "DEBUG site config:"
+    pp site
+  end
 
-################################################################################
-#
-# Verify connectivity
-#
+  if site.nil?
+    $stderr.puts "wbackup error: Could not find #{label} in config file".red
+    exit 1
+  end
 
-myexec "ssh #{site[:site_host]} hostname", exec_opts
+  ################################################################################
+  #
+  # Verify connectivity
+  #
 
-################################################################################
-#
-# Backup dir:
-#
+  myexec "ssh #{site[:site_host]} hostname", exec_opts
 
-# Set variables
-backup_dir = File.join(config[:backup][:storage],site[:url])
-test_file = File.join(backup_dir,'.test')
+  ################################################################################
+  #
+  # Backup dir:
+  #
 
-pp "DEBUG: backupdir = #{backup_dir}" if options.debug
+  # Set variables
+  backup_dir = File.join(config[:backup][:storage],site[:url])
+  test_file = File.join(backup_dir,'.test')
 
-# Verify backup dir:
+  pp "DEBUG: backupdir = #{backup_dir}" if options.debug
 
-begin
-  FileUtils.mkdir_p(backup_dir) if not File.exists?(backup_dir)
-  FileUtils.touch(test_file) 
-  FileUtils.rm(test_file) 
-rescue => e
-  puts "wbackup error: Something wrong happened when trying to use #{backup_dir}".red
-  puts "Error was: #{e}".red
-  exit 1
-end
+  # Verify backup dir:
 
-################################################################################
-#
-# Get the tags and calculate the new tag number
-#
+  begin
+    FileUtils.mkdir_p(backup_dir) if not File.exists?(backup_dir)
+    FileUtils.touch(test_file) 
+    FileUtils.rm(test_file) 
+  rescue => e
+    puts "wbackup error: Something wrong happened when trying to use #{backup_dir}".red
+    puts "Error was: #{e}".red
+    exit 1
+  end
 
-tags = Dir[File.join(backup_dir,'*')].map { |x| x.split('/').last.to_i }
-new_tag = tags.empty? ? 0 : tags.sort.last + 1
+  ################################################################################
+  #
+  # Get the tags and calculate the new tag number
+  #
 
-if options.debug
-  pp "DEBUG: Current tags: #{tags}"
-  pp "DEBUG: New tag:#{new_tag}"
-end
+  tags = Dir[File.join(backup_dir,'*')].map { |x| x.split('/').last.to_i }
+  new_tag = tags.empty? ? 0 : tags.sort.last + 1
 
-################################################################################
-#
-# Create the new tag forlder and verify contents for previous backup
-# to perform a link copy:
-#
+  if options.debug
+    pp "DEBUG: Current tags: #{tags}"
+    pp "DEBUG: New tag:#{new_tag}"
+  end
+
+  ################################################################################
+  #
+  # Create the new tag folder and verify contents for previous backup
+  # to perform a link copy:
+  #
 
 
-data_dir =  File.join(backup_dir,new_tag.to_s,'data')
-db_dir =  File.join(backup_dir,new_tag.to_s,'db')
-md_dir = File.join(backup_dir,new_tag.to_s)
+  data_dir =  File.join(backup_dir,new_tag.to_s,'data')
+  db_dir =  File.join(backup_dir,new_tag.to_s,'db')
+  md_dir = File.join(backup_dir,new_tag.to_s)
 
-FileUtils.mkdir_p db_dir
-pp "DEBUG: data_dir : #{data_dir}" if options.debug
-pp "DEBUG: db_dir : #{db_dir}" if options.debug
+  FileUtils.mkdir_p db_dir
+  pp "DEBUG: data_dir : #{data_dir}" if options.debug
+  pp "DEBUG: db_dir : #{db_dir}" if options.debug
 
-if new_tag > 0
+  if new_tag > 0
 
-  prev_tag = new_tag - 1
-  prev_data_dir = File.join(backup_dir,prev_tag.to_s,'data')
+    prev_tag = new_tag - 1
+    prev_data_dir = File.join(backup_dir,prev_tag.to_s,'data')
 
-  pp "DEBUG: Prev tag: #{prev_tag}" if options.debug
+    pp "DEBUG: Prev tag: #{prev_tag}" if options.debug
+
+    if not options.skipfiles
+
+      # If it is incremental but the data dir doesn't exist
+      if not File.exists? prev_data_dir 
+        puts "warning: previous tag data dir does not exists, continue with full backup".yellow if not options.quiet
+        FileUtils.mkdir_p data_dir
+      else
+        myexec "cp -al #{prev_data_dir} #{data_dir}", exec_opts
+      end
+
+    end
+
+    # If it is tag 0 just create the data_dir
+  else
+    FileUtils.mkdir_p data_dir
+  end
+
+  ################################################################################
+  #
+  # Rsync content 
+  # 
 
   if not options.skipfiles
+    bkp_files = "/usr/bin/rsync "
+    bkp_files += "--archive "
+    bkp_files += "--delete "
+    bkp_files += "--verbose " if options.verbose
+    bkp_files += "--quiet " if options.quiet
+    bkp_files += "#{site[:site_host]}:#{site[:site_path]}/ "
+    bkp_files += "#{data_dir} "
 
-    # If it is incremental but the data dir doesn't exist
-    if not File.exists? prev_data_dir 
-      puts "warning: previous tag data dir does not exists, continue with full backup".yellow if not options.quiet
-      FileUtils.mkdir_p data_dir
-    else
-      myexec "cp -al #{prev_data_dir} #{data_dir}", exec_opts
-    end
+    puts "DEBUG: #{bkp_files}" if options.debug
+
+    print "Backing up files: " if not options.quiet
+    myexec bkp_files, exec_opts
+    puts "OK".green if not options.quiet and not options.verbose 
+  end
+
+  ################################################################################
+  #
+  # Database:
+  # 
+
+  options.skipdb = true if site[:mysql_db].nil? 
+
+  if not options.skipdb
+
+    # variables
+    bkp_db = "ssh " 
+    bkp_db += "#{site[:mysql_host]} " 
+    bkp_db += "'/usr/bin/mysqldump #{site[:mysql_db]}' "
+    bkp_db += "|gzip - > #{db_dir}/dbdump.sql.gz"
+
+    # debug
+    puts "DEBUG: #{bkp_db}" if options.debug
+
+    print "Backing up DB: " if not options.quiet
+    myexec bkp_db, exec_opts
+    puts "OK".green if not options.quiet
 
   end
 
-  # If it is tag 0 just create the data_dir
-else
-  FileUtils.mkdir_p data_dir
+  ################################################################################
+  #
+  # Print metadata:
+  # 
+
+  metadata = {
+    label: site[:label],
+    url: site[:url],
+    description: options.description,
+    date:        Time.now,
+    skip_db:     options.skipdb,
+    tag:         new_tag,
+  }
+
+  begin 
+    md_file = File.join(md_dir,'metadata.yaml')
+    File.open(md_file,'w') do |f|
+      f.write metadata.to_yaml
+    end
+  rescue => e
+    puts "wbackup error: Something wrong happened when trying to write on #{md_file}".red
+    puts "Error was: #{e}".red
+  end
+
 end
 
 ################################################################################
 #
-# Rsync content 
+# Mirroring:
 # 
 
-if not options.skipfiles
-  bkp_files = "/usr/bin/rsync "
-  bkp_files += "--archive "
-  bkp_files += "--delete "
-  bkp_files += "--verbose " if options.verbose
-  bkp_files += "--quiet " if options.quiet
-  bkp_files += "#{site[:site_host]}:#{site[:site_path]}/ "
-  bkp_files += "#{data_dir} "
+if config[:backup][:mirror] != nil and options.mirror
 
-  puts "DEBUG: #{bkp_files}" if options.debug
-
-  print "Backing up files: " if not options.quiet
-  myexec bkp_files, exec_opts
-  puts "OK".green if not options.quiet and not options.verbose 
-end
-
-################################################################################
-#
-# Database:
-# 
-
-options.skipdb = true if site[:mysql_db].nil? 
-
-if not options.skipdb
+  # Create dir if it doesn't exist:
+  FileUtils.mkdir_p config[:backup][:mirror] if not File.exist? config[:backup][:mirror]
 
   # variables
-  bkp_db = "ssh " 
-  bkp_db += "#{site[:mysql_host]} " 
-  bkp_db += "'/usr/bin/mysqldump #{site[:mysql_db]}' "
-  bkp_db += "|gzip - > #{db_dir}/dbdump.sql.gz"
+  mirror_cmd = "rsync -aH " 
+  mirror_cmd += "#{config[:backup][:storage]} " 
+  mirror_cmd += "#{config[:backup][:mirror]} " 
 
   # debug
-  puts "DEBUG: #{bkp_db}" if options.debug
+  puts "DEBUG: #{mirror_cmd}" if options.debug
 
-  print "Backing up DB: " if not options.quiet
-  myexec bkp_db, exec_opts
+  print "Mirroring storage " if not options.quiet
+  myexec mirror_cmd, exec_opts
   puts "OK".green if not options.quiet
 
 end
 
-################################################################################
-#
-# Print metadata:
-# 
-
-metadata = {
-  label: site[:label],
-  url: site[:url],
-  description: options.description,
-  date:        Time.now,
-  skip_db:     options.skipdb,
-  tag:         new_tag,
-}
-
-begin 
-  md_file = File.join(md_dir,'metadata.yaml')
-  File.open(md_file,'w') do |f|
-    f.write metadata.to_yaml
-  end
-rescue => e
-  puts "wbackup error: Something wrong happened when trying to write on #{md_file}".red
-  puts "Error was: #{e}".red
-end
 
 
 
