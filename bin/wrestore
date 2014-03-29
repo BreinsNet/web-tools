@@ -9,7 +9,11 @@ require 'fileutils'
 require 'yaml'
 require 'timeout'
 require 'pp'
-require_relative File.join(File.dirname(__FILE__),'..','lib','functions.rb')
+# If this is a symlink, go and get the working directory through it:
+
+root_dir = File.symlink?(__FILE__) ? File.readlink(__FILE__) : __FILE__
+
+require_relative File.join(root_dir,'..','..','lib','functions.rb')
 
 
 ################################################################################

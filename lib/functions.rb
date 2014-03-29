@@ -76,7 +76,10 @@ def load_config_file
 
   begin
 
-    File.open(File.join(File.dirname(__FILE__),"..","conf","settings.yaml")) do |file|
+    file_full_path = File.symlink?(__FILE__) ? File.readlink(__FILE__) : __FILE__
+    root_dir = File.dirname(file_full_path)
+    
+    File.open(File.join(root_dir,"..","conf","settings.yaml")) do |file|
       content = file.read
       config = YAML::load(content)
     end
