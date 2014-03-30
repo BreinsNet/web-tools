@@ -229,7 +229,7 @@ if label != nil
   #
 
   puts "INFO: Verifying connectivity: " if options.verbose
-  myexec "ssh #{config[:backup_user]}@#{site[:site_host]} hostname", exec_opts
+  myexec "ssh #{config[:user]}@#{site[:site_host]} hostname", exec_opts
 
   ################################################################################
   #
@@ -317,7 +317,7 @@ if label != nil
     bkp_files += "--delete "
     bkp_files += "--verbose " if options.verbose
     bkp_files += "--quiet " if options.quiet
-    bkp_files += "#{config[:backup_user]}@#{site[:site_host]}:#{site[:site_path]}/ "
+    bkp_files += "#{config[:user]}@#{site[:site_host]}:#{site[:site_path]}/ "
     bkp_files += "#{data_dir} "
 
     puts "DEBUG: #{bkp_files}" if options.debug
@@ -338,17 +338,19 @@ if label != nil
 
     # variables
     bkp_db = "ssh " 
-    bkp_db += "#{config[:backup_user]}@#{site[:mysql_host]} " 
-    bkp_db += "'/usr/bin/mysqldump #{site[:mysql_db]}' "
-    bkp_db += "|gzip - > #{db_dir}/dbdump.sql.gz"
+    bkp_db += "#{config[:user]}@#{site[:mysql_host]} " 
+    bkp_db += "'/usr/bin/mysqldump -u#{site[:mysql_user]} -p#{site[:mysql_pass]} #{site[:mysql_db]}' > #{db_dir}/dbdump.sql"
 
     # debug
     puts "DEBUG: #{bkp_db}" if options.debug
 
     print "Backing up DB: " if not options.quiet
-    myexec bkp_db, exec_opts
-    puts "OK".green if not options.quiet
 
+    myexec bkp_db, exec_opts
+    zip_db = "gzip #{db_dir}/dbdump.sql"
+    myexec zip_db, exec_opts
+
+    puts "OK".green if not options.quiet
   end
 
   ################################################################################

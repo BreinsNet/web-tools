@@ -41,6 +41,8 @@ class OptparseWsync
     options.transfer_type = :rsync
     options.skipdb = false
     options.skipfiles = false
+    options.use_sudo = false
+    options.delete = false
 
     opt_parser = OptionParser.new do |opts|
 
@@ -77,6 +79,16 @@ class OptparseWsync
       # sync db
       opts.on("-f", "--skipfiles", "Do not sync files") do
         options.skipfiles = true
+      end
+
+      # Sudo
+      opts.on("-S", "--use_sudo", "Use sudo on remote host to transfer files") do
+        options.use_sudo = true
+      end
+
+      # rsync delete option
+      opts.on("-d", "--delete", "Use delete on remote host to transfer files") do
+        options.delete = true
       end
       
       # exclude files
@@ -191,7 +203,7 @@ end
 #
 
 [src[:mysql_host],dst[:mysql_host],src[:site_host],dst[:site_host]].uniq.each do |site| 
-  myexec "ssh #{site} hostname", 
+  myexec "ssh #{config[:user]}@#{site} hostname", 
     {
       :stderr => options.debug, 
       :stdout => options.verbose, 
@@ -233,7 +245,9 @@ if not options.skipfiles
   when :rsync
     # Variables:
     mf_cmd = "/usr/bin/rsync"
-    mf_flags = "--archive --delete --verbose"
+    mf_flags = "--archive --delete --verbose "
+    mf_flags += "--rsync-path=\"sudo rsync\" " if options.use_sudo
+    mf_flags += "--delete " if options.delete
     mf_src_host = src[:site_host]
     mf_src_path = src[:site_path]
     mf_dst_host = dst[:site_host]
@@ -241,8 +255,8 @@ if not options.skipfiles
     mf_cache_dir = File.join(cache_dir,src[:url])
 
     # Commands to excecute
-    mf_exec_a = "#{mf_cmd} #{mf_flags} #{mf_src_host}:#{mf_src_path}/ #{mf_cache_dir}"
-    mf_exec_b = "#{mf_cmd} #{mf_flags} #{mf_cache_dir}/ #{mf_dst_host}:#{mf_dst_path}"
+    mf_exec_a = "#{mf_cmd} #{mf_flags} #{config[:user]}@#{mf_src_host}:#{mf_src_path}/ #{mf_cache_dir}"
+    mf_exec_b = "#{mf_cmd} #{mf_flags} #{mf_cache_dir}/ #{config[:user]}@#{mf_dst_host}:#{mf_dst_path}"
 
     # debug;
     puts "DEBUG: #{mf_exec_a}" if options.debug
@@ -267,15 +281,15 @@ if not options.skipdb
   # variables
   cdb_src_host = src[:mysql_host]
   cdb_dst_host = dst[:mysql_host]
-  cdb_drop_db_sql = "/usr/bin/mysql -e \"DROP DATABASE #{dst[:mysql_db]};\""
-  cdb_create_db_sql = "/usr/bin/mysql -e \"CREATE DATABASE #{dst[:mysql_db]};\""
-  cdb_dump_db_cmd = "/usr/bin/mysqldump #{src[:mysql_db]}"
-  cdb_import_db_cmd = "/usr/bin/mysql #{dst[:mysql_db]}"
+  cdb_drop_db_sql = "/usr/bin/mysql -u#{src[:mysql_user]} -p#{src[:mysql_pass]} -e \"DROP DATABASE #{dst[:mysql_db]};\""
+  cdb_create_db_sql = "/usr/bin/mysql -u#{dst[:mysql_user]} -p#{dst[:mysql_pass]} -e \"CREATE DATABASE #{dst[:mysql_db]};\""
+  cdb_dump_db_cmd = "/usr/bin/mysqldump  -u#{src[:mysql_user]} -p#{src[:mysql_pass]}  #{src[:mysql_db]}"
+  cdb_import_db_cmd = "/usr/bin/mysql -u#{src[:mysql_user]} -p#{src[:mysql_pass]} #{dst[:mysql_db]}"
 
   # Commands to execute
-  cdb_exec_a = "ssh #{cdb_dst_host} '#{cdb_drop_db_sql}'"
-  cdb_exec_b = "ssh #{cdb_dst_host} '#{cdb_create_db_sql}'"
-  cdb_exec_c = "ssh #{cdb_src_host} #{cdb_dump_db_cmd}|ssh #{cdb_dst_host} #{cdb_import_db_cmd}"
+  cdb_exec_a = "ssh #{config[:user]}@#{cdb_dst_host} '#{cdb_drop_db_sql}'"
+  cdb_exec_b = "ssh #{config[:user]}@#{cdb_dst_host} '#{cdb_create_db_sql}'"
+  cdb_exec_c = "ssh #{config[:user]}@#{cdb_src_host} #{cdb_dump_db_cmd}|ssh #{config[:user]}@#{cdb_dst_host} #{cdb_import_db_cmd}"
 
   # debug
   if options.debug
@@ -300,7 +314,7 @@ end
 if not dst[:exec_remote].to_s.empty?
   print "Running remote command: " if not options.quiet
   puts "DEBUG: Executing #{dst[:exec_remote]} on #{dst[:site_host]}" if options.debug
-  cmd = "ssh #{dst[:site_host]} '#{dst[:exec_remote]}'"
+  cmd = "ssh #{config[:user]}@#{dst[:site_host]} '#{dst[:exec_remote]}'"
   myexec cmd, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => false, :timeout => EXEC_TIMEOUT}
   print "OK\n".green if not options.quiet and not options.verbose
 end
