@@ -37,6 +37,7 @@ class OptparseWrestore
     options.skipdb = false
     options.skipfiles = false
     options.tag = -1
+    options.use_sudo = false
 
     opt_parser = OptionParser.new do |opts|
 
@@ -74,6 +75,11 @@ class OptparseWrestore
       # Debug the script
       opts.on("-d", "--debug", "Debug the script internals") do
         options.debug = true
+      end
+
+      # Debug the script
+      opts.on("-S", "--use_sudo", "Use sudo for filesystem ops") do
+        options.use_sudo = true
       end
 
       opts.separator ""
@@ -197,7 +203,7 @@ remote = dst_label ? dst_site : site
 # Verify connectivity
 #
 
-myexec "ssh #{remote[:site_host]} hostname", exec_opts
+myexec "ssh #{config[:user]}@#{remote[:site_host]} hostname", exec_opts
 
 ################################################################################
 #
@@ -277,7 +283,12 @@ puts "DEBUG: restore_dir = #{remote[:site_path]}" if options.debug
 test_file = File.join(remote[:site_path],'.restore_test')
 
 # Verify restore dir:
-myexec "ssh #{remote[:site_host]} 'touch #{test_file}'", exec_opts if not options.skipfiles
+
+test_cmd = "ssh #{config[:user]}@#{remote[:site_host]} "
+test_cmd +="sudo " if options.use_sudo
+test_cmd +="touch #{test_file}"
+
+myexec test_cmd, exec_opts if not options.skipfiles
 
 ################################################################################
 #
@@ -291,8 +302,9 @@ if not options.skipfiles
   restore_files += "--delete "
   restore_files += "--verbose " if options.verbose
   restore_files += "--quiet " if options.quiet
+  restore_files += "--rsync-path=\"sudo rsync\" " if options.use_sudo
   restore_files += "#{data_dir}/ "
-  restore_files += "#{remote[:site_host]}:#{remote[:site_path]} "
+  restore_files += "#{config[:user]}@#{remote[:site_host]}:#{remote[:site_path]} "
 
   puts "DEBUG: #{restore_files}" if options.debug
 
@@ -312,16 +324,16 @@ if not options.skipdb
 
   # Flush db command:
   flush_db = "ssh "
-  flush_db += "#{remote[:mysql_host]} " 
-  flush_db += "'/usr/bin/mysql -e " 
+  flush_db += "#{config[:user]}@#{remote[:mysql_host]} " 
+  flush_db += "'/usr/bin/mysql -u#{remote[:mysql_user]} -p#{remote[:mysql_pass]} -e" 
   flush_db += "\"DROP DATABASE #{remote[:mysql_db]};" 
   flush_db += "CREATE DATABASE #{remote[:mysql_db]};\"'" 
 
   # command:
   restore_db = "cat #{dump_file}|gunzip - |"
   restore_db += "ssh " 
-  restore_db += "#{remote[:mysql_host]} " 
-  restore_db += "'/usr/bin/mysql #{remote[:mysql_db]}' "
+  restore_db += "#{config[:user]}@#{remote[:mysql_host]} " 
+  restore_db += "'/usr/bin/mysql -u#{remote[:mysql_user]} -p#{remote[:mysql_pass]} #{remote[:mysql_db]}' "
 
   # debug
   puts "DEBUG: #{flush_db}" if options.debug
@@ -340,7 +352,7 @@ end
 if not remote[:exec_remote].to_s.empty?
   print "Running remote command: " if not options.quiet
   puts "DEBUG: Executing #{remote[:exec_remote]} on #{remote[:site_host]}" if options.debug
-  cmd = "ssh #{remote[:site_host]} '#{remote[:exec_remote]}'"
+  cmd = "ssh #{config[:user]}@#{remote[:site_host]} '#{remote[:exec_remote]}'"
   myexec cmd, {:stderr => options.debug, :stdout => options.verbose, :exit_on_error => false, :timeout => EXEC_TIMEOUT}
   print "OK\n".green if not options.quiet and not options.verbose
 end
