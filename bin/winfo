@@ -211,6 +211,8 @@ exit
     rows << [site[:label],site[:url],site[:site_host]] 
   end
 
+  rows.sort_by! { |row| row[0] }
+
   puts Terminal::Table.new :title => "Website list", :headings => ['Label', 'URL','Server'], :rows => rows
 
 end
