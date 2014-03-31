@@ -244,7 +244,8 @@ if not options.skipfiles
   case options.transfer_type
   when :rsync
     # Variables:
-    mf_cmd = "/usr/bin/rsync"
+    mf_cmd = "sudo " if options.use_sudo
+    mf_cmd += "/usr/bin/rsync"
     mf_flags = "--archive --verbose "
     mf_flags += "--delete " if options.delete
     mf_flags += "--rsync-path=\"sudo rsync\" " if options.use_sudo

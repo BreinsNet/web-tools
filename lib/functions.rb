@@ -57,7 +57,7 @@ def myexec cmd, opts = {:stderr => false, :stdout => true, :exit_on_error => tru
     exit_status = wait_thr.value.exitstatus
     if exit_status > 0
       $stderr.puts "#{command} error: Command returned non zero - error was:\n#{stderr.read}".red if opts[:stderr]
-      exit if opts[:exit_on_error]
+      exit 1 if opts[:exit_on_error]
     end
 
   rescue => e
