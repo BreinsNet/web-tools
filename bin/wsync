@@ -43,6 +43,7 @@ class OptparseWsync
     options.skipfiles = false
     options.use_sudo = false
     options.delete = false
+    options.dry_run = false
 
     opt_parser = OptionParser.new do |opts|
 
@@ -89,6 +90,11 @@ class OptparseWsync
       # rsync delete option
       opts.on("-D", "--delete", "Use delete on remote host to transfer files") do
         options.delete = true
+      end
+
+      # dry_run
+      opts.on("-r", "--dry_run", "Just simulate the sync, do not actually excecute it") do
+        options.dry_run = true
       end
       
       # exclude files
@@ -246,8 +252,9 @@ if not options.skipfiles
     # Variables:
     mf_cmd = "sudo " if options.use_sudo
     mf_cmd += "/usr/bin/rsync"
-    mf_flags = "--archive --verbose "
+    mf_flags = "--archive --verbose --checksum "
     mf_flags += "--delete " if options.delete
+    mf_flags += "--dry-run " if options.dry_run
     mf_flags += "--rsync-path=\"sudo rsync\" " if options.use_sudo
     mf_src_host = src[:site_host]
     mf_src_path = src[:site_path]
@@ -304,10 +311,14 @@ if not options.skipdb
 
   # Execute commands:
   print "Syncing database: " if not options.quiet
-  myexec cdb_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  myexec cdb_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  myexec cdb_exec_c, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-  myexec cdb_exec_d, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+
+  if not options.dry_run
+    myexec cdb_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec cdb_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec cdb_exec_c, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec cdb_exec_d, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+  end
+
   print "OK\n".green if not options.quiet or not options.verbose
 
 end
