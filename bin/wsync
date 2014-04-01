@@ -44,6 +44,7 @@ class OptparseWsync
     options.use_sudo = false
     options.delete = false
     options.dry_run = false
+    options.convert_domain = false
 
     opt_parser = OptionParser.new do |opts|
 
@@ -80,6 +81,11 @@ class OptparseWsync
       # sync db
       opts.on("-f", "--skipfiles", "Do not sync files") do
         options.skipfiles = true
+      end
+
+      # Convert domain db
+      opts.on("-C", "--convert-domain", "Search and replace old domain with new domain on mysql") do
+        options.convert_domain = true
       end
 
       # Sudo
@@ -250,8 +256,9 @@ if not options.skipfiles
   case options.transfer_type
   when :rsync
     # Variables:
+    mf_cmd = ''
     mf_cmd = "sudo " if options.use_sudo
-    mf_cmd += "/usr/bin/rsync"
+    mf_cmd += "/usr/bin/rsync "
     mf_flags = "--archive --verbose --checksum "
     mf_flags += "--delete " if options.delete
     mf_flags += "--dry-run " if options.dry_run
@@ -316,6 +323,13 @@ if not options.skipdb
     myexec cdb_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
     myexec cdb_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
     myexec cdb_exec_c, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+
+    if options.convert_domain
+      content = File.read('/tmp/dumpdb.sql')
+      content.gsub!(src[:url],dst[:url])
+      File.write('/tmp/dumpdb.sql',content)
+    end
+
     myexec cdb_exec_d, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
   end
 
