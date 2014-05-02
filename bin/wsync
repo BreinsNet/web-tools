@@ -328,7 +328,7 @@ if not options.skipdb
 
     if options.convert_domain
       content = File.open('/tmp/dumpdb.sql','rb').read
-      content.gsub!(src[:url],dst[:url])
+      content.gsub!(/(http.?:\/\/)#{src[:url]}/,"\\1#{dst[:url]}")
       File.write('/tmp/dumpdb.sql',content)
     end
 
