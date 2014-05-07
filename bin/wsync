@@ -46,6 +46,7 @@ class OptparseWsync
     options.use_sudo = false
     options.delete = false
     options.dry_run = false
+    options.ignore_tables = false
     options.convert_domain = false
 
     opt_parser = OptionParser.new do |opts|
@@ -103,6 +104,11 @@ class OptparseWsync
       # dry_run
       opts.on("-r", "--dry_run", "Just simulate the sync, do not actually excecute it") do
         options.dry_run = true
+      end
+
+      # Exclude tables
+      opts.on("-X", "--ignore-tables=CSV","CSV of exclude tables") do |x|
+        options.ignore_tables = x 
       end
       
       # exclude files
@@ -295,12 +301,17 @@ end
 
 if not options.skipdb
 
+  ignore_table = ''
+  if options.ignore_tables
+    ignore_table = options.ignore_tables.split(',').map {|x| "--ignore-table=#{src[:mysql_db]}.#{x}"}.join(' ')
+  end
+
   # variables
   cdb_src_host = src[:mysql_host]
   cdb_dst_host = dst[:mysql_host]
   cdb_drop_db_sql = "/usr/bin/mysql -u#{dst[:mysql_user]} -p#{dst[:mysql_pass]} -e \"DROP DATABASE #{dst[:mysql_db]};\""
   cdb_create_db_sql = "/usr/bin/mysql -u#{dst[:mysql_user]} -p#{dst[:mysql_pass]} -e \"CREATE DATABASE #{dst[:mysql_db]};\""
-  cdb_dump_db_cmd = "/usr/bin/mysqldump  -u#{src[:mysql_user]} -p#{src[:mysql_pass]}  #{src[:mysql_db]}"
+  cdb_dump_db_cmd = "/usr/bin/mysqldump  -u#{src[:mysql_user]} -p#{src[:mysql_pass]} #{ignore_table}  #{src[:mysql_db]}"
   cdb_import_db_cmd = "/usr/bin/mysql -u#{dst[:mysql_user]} -p#{dst[:mysql_pass]} #{dst[:mysql_db]}"
 
   # Commands to execute
@@ -322,8 +333,8 @@ if not options.skipdb
   print "Syncing database: " if not options.quiet
 
   if not options.dry_run
-    myexec cdb_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
-    myexec cdb_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
+    myexec cdb_exec_a, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT } unless options.ignore_tables
+    myexec cdb_exec_b, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT } unless options.ignore_tables
     myexec cdb_exec_c, {:stderr => true, :stdout => options.verbose, :exit_on_error => true, :timeout => EXEC_TIMEOUT }
 
     if options.convert_domain
