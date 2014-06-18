@@ -73,6 +73,7 @@ def load_config_file
 
   command = File.basename($0)
   config = nil
+  content = ''
 
   begin
 
@@ -83,6 +84,16 @@ def load_config_file
       content = file.read
       config = YAML::load(content)
     end
+
+    if config.has_key? :includedir
+      unless Dir[File.join(config[:includedir],'*')].empty?
+        Dir[File.join(config[:includedir],'*')].each do |filename|
+          content += File.read(filename)
+        end
+      end
+    end
+
+    config = YAML::load(content)
 
   rescue => e
 

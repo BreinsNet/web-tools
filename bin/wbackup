@@ -173,7 +173,6 @@ if options.all
 
   puts "INFO: Backing up all the sites:" unless options.quiet
 
-
   backup_all_sites = config[:websites].select {|site| site if site[:backup_all] == true }
 
   backup_all_sites.each do |site|
